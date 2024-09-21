@@ -1,0 +1,8 @@
+streamlit 
+pytesseract 
+pillow 
+pandas 
+groq 
+llama-index 
+reportlab 
+python-docx
