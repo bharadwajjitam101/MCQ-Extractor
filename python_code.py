@@ -1,3 +1,9 @@
+# What the code does?
+# 1. Extracts text from images or PDFs.
+# 2. Uses the Groq API to parse and format MCQs from the extracted text.
+# 3. Allows users to edit the extracted MCQs interactively.
+# 4. Provides options to save the MCQs in various formats (CSV, JSON, PDF, DOCX).
+
 import pytesseract
 from PIL import Image
 import pandas as pd
