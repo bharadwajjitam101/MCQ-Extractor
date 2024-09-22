@@ -24,12 +24,11 @@ from reportlab.lib.units import inch
 from docx import Document
 from docx.shared import Inches
 import io
+from dotenv import load_dotenv
+import os
 
-# Set your Groq API key
-headers={
-    "authorization": st.secrets["groq_api_key"]
-
-}
+# Load environment variables
+load_dotenv()
 
 def add_styles():
     st.markdown(
@@ -253,7 +252,7 @@ def extract_text_from_pdf(file):
             return ""
 
 def parse_and_format_mcqs_with_groq(text):
-    client = Groq(api_key=groq_api_key)
+    client = Groq(api_key=os.getenv("groq_api_key"))
     response = client.chat.completions.create(
         model="llama-3.1-70b-versatile",
         messages=[
