@@ -6,3 +6,4 @@ groq
 llama-index 
 reportlab 
 python-docx
+python-dotenv
