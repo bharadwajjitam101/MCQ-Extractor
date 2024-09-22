@@ -27,7 +27,7 @@ import io
 
 # Set your Groq API key
 headers={
-    "authorization": st.sectrets["groq_api_key"]
+    "authorization": st.secrets["groq_api_key"]
 
 }
 
