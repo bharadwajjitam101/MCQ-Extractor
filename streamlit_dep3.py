@@ -26,7 +26,7 @@ from pygments.formatters import HtmlFormatter
 import requests
 from streamlit.components.v1 import html
 
-groq_api_key = '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'
+groq_api_key = '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'
 
 def add_styles():
     st.markdown(
