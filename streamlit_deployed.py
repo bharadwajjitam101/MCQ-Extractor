@@ -25,7 +25,7 @@ from docx import Document
 from docx.shared import Inches
 import io
 
-groq_api_key = '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'
+groq_api_key = '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'
 
 def add_styles():
     st.markdown(
