@@ -1,5 +1,3 @@
-#copy to clipboard added
-
 import streamlit as st
 import pytesseract
 from PIL import Image
@@ -10,22 +8,10 @@ import tempfile
 from llama_index.core import SimpleDirectoryReader
 import re
 import json
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter, landscape, portrait
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
-from reportlab.lib.units import inch
-from docx import Document
-from docx.shared import Inches
-import io
-import json
-from pygments import highlight
-from pygments.lexers import JsonLexer
-from pygments.formatters import HtmlFormatter
 import requests
 from streamlit.components.v1 import html
 
+# API Key (Consider using environment variables in production)
 groq_api_key = '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'
 
 def add_styles():
@@ -47,6 +33,19 @@ def add_styles():
             background-size: cover;
         }
 
+        /* Improve data editor text areas */
+        .stDataEditor textarea {
+            min-height: 100px;  /* Increase height of text areas */
+            resize: vertical;   /* Allow vertical resizing */
+            font-size: 14px;    /* Adjust font size */
+            line-height: 1.5;   /* Add more line spacing */
+            padding: 10px;      /* Add some padding */
+        }
+
+        .stDataEditor .stColumn {
+            margin-bottom: 10px; /* Add space between columns */
+        }
+
         /* Main content area */
         .main .block-container {
             background-color: rgba(0, 0, 0, 0.95);
@@ -56,17 +55,7 @@ def add_styles():
             backdrop-filter: blur(10px);
         }
 
-        /* Header Styles */
-        h1 {
-            color: #4a5568;
-            font-weight: 700;
-            margin-bottom: 1.5rem;
-            text-align: center;
-            font-size: 2.5rem;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
-        }
-
-        /* Streamlit elements styling */
+        /* Buttons and other styling remains the same as in the previous implementation */
         .stButton > button {
             background-color: #4299e1;
             color: white;
@@ -75,68 +64,11 @@ def add_styles():
             padding: 0.6rem 1.5rem;
             font-weight: 600;
             transition: all 0.3s ease;
-            box-shadow: 0 4px 6px rgba(50, 50, 93, 0.11), 0 1px 3px rgba(0, 0, 0, 0.08);
         }
 
         .stButton > button:hover {
             background-color: #3182ce;
             transform: translateY(-2px);
-            box-shadow: 0 7px 14px rgba(50, 50, 93, 0.1), 0 3px 6px rgba(0, 0, 0, 0.08);
-        }
-
-        /* File uploader styling */
-        .stFileUploader > div {
-            border: 2px dashed #4299e1;
-            border-radius: 15px;
-            padding: 2rem;
-            text-align: center;
-            background-color: rgba(237, 242, 247, 0.8);
-            transition: all 0.3s ease;
-        }
-
-        .stFileUploader > div:hover {
-            background-color: rgba(237, 242, 247, 1);
-            border-color: #3182ce;
-        }
-
-        /* Data editor styling */
-        .stDataFrame {
-            border: none;
-            border-radius: 10px;
-            overflow: hidden;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-
-        .stDataFrame thead tr th {
-            background-color: #4a5568;
-            color: white;
-            font-weight: 600;
-            padding: 1rem;
-        }
-
-        .stDataFrame tbody tr:nth-child(even) {
-            background-color: #f7fafc;
-        }
-
-        .stDataFrame tbody tr:hover {
-            background-color: #edf2f7;
-        }
-
-        /* Improve readability of text on the background image */
-        .stApp > .main {
-            background-color: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            border-radius: 15px;
-            margin: 1rem;
-            padding: 1rem;
-        }
-
-        /* Style the sidebar */
-        .sidebar .sidebar-content {
-            background-color: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            border-radius: 15px;
-            padding: 1rem;
         }
         </style>
         """,
@@ -267,25 +199,22 @@ def extract_mcqs(file):
         st.warning("No text found in the document.")
         return None
 
-
 def send_to_backend_api(json_data):
     # Replace with your actual backend API endpoint
     api_url = "https://your-backend-api-endpoint.com/mcq"
     
     headers = {
         "Content-Type": "application/json",
-        # Add any other headers your API requires, such as authentication tokens
     }
     
     try:
         response = requests.post(api_url, json=json_data, headers=headers)
-        response.raise_for_status()  # Raises an HTTPError for bad responses
+        response.raise_for_status()
         return True, "Data successfully sent to the backend API"
     except requests.RequestException as e:
         return False, f"Error sending data to the backend API: {str(e)}"
 
 def copy_to_clipboard(json_str):
-    # Function to create a button that copies text to clipboard
     copy_button_html = f"""
         <textarea id="json-data" style="position: absolute; left: -9999px;">{json_str}</textarea>
         <button onclick="copyToClipboard()">Copy JSON to Clipboard</button>
@@ -335,26 +264,31 @@ def main():
                     "Question",
                     width="large",
                     required=True,
+                    help="Edit the question text. Press Shift+Enter for line breaks.",
                 ),
                 "Option A": st.column_config.TextColumn(
                     "Option A",
                     width="medium",
                     required=True,
+                    help="Edit option A. Press Shift+Enter for line breaks.",
                 ),
                 "Option B": st.column_config.TextColumn(
                     "Option B",
                     width="medium",
                     required=True,
+                    help="Edit option B. Press Shift+Enter for line breaks.",
                 ),
                 "Option C": st.column_config.TextColumn(
                     "Option C",
                     width="medium",
                     required=True,
+                    help="Edit option C. Press Shift+Enter for line breaks.",
                 ),
                 "Option D": st.column_config.TextColumn(
                     "Option D",
                     width="medium",
                     required=True,
+                    help="Edit option D. Press Shift+Enter for line breaks.",
                 ),
             }
         )
@@ -368,12 +302,12 @@ def main():
             json_data = []
             for _, row in edited_df.iterrows():
                 question_data = {
-                    "question": row["Question"],
+                    "question": row["Question"].replace('\n', ' '),
                     "options": [
-                        row["Option A"],
-                        row["Option B"],
-                        row["Option C"],
-                        row["Option D"]
+                        row["Option A"].replace('\n', ' '),
+                        row["Option B"].replace('\n', ' '),
+                        row["Option C"].replace('\n', ' '),
+                        row["Option D"].replace('\n', ' ')
                     ]
                 }
                 json_data.append(question_data)
@@ -387,13 +321,6 @@ def main():
             # Add copy to clipboard button
             st.write("Copy JSON to Clipboard:")
             html(copy_to_clipboard(formatted_json), height=50)
-            
-            # Send to backend API
-            success, message = send_to_backend_api(json_data)
-            if success:
-                st.success(message)
-            else:
-                st.error(message)
 
 if __name__ == "__main__":
     main()
