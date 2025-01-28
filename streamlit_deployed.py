@@ -1,3 +1,10 @@
+# What the code does?
+# 0. Uses Streamlit to deploy the real use of the code
+# 1. Extracts text from images or PDFs.
+# 2. Uses the Groq API to parse and format MCQs from the extracted text.
+# 3. Allows users to edit the extracted MCQs interactively.
+# 4. Provides options to save the MCQs in various formats (CSV, JSON, PDF, DOCX).
+
 import streamlit as st
 import pytesseract
 from PIL import Image
@@ -244,7 +251,7 @@ def extract_text_from_pdf(file):
 def parse_and_format_mcqs_with_groq(text):
     client = Groq(api_key=groq_api_key)
     response = client.chat.completions.create(
-        model="mixtral-8x7b-32768",
+        model="llama-3.1-70b-versatile",
         messages=[
             {
                 "role": "system",
@@ -379,4 +386,191 @@ def customize_pdf_settings():
 def save_as_pdf(df, settings):
     buffer = io.BytesIO()
     page_size = landscape(letter) if settings["page_orientation"] == "Landscape" else portrait(letter)
-    doc = SimpleDocTemplate(buffer, pagesize=page_
+    doc = SimpleDocTemplate(buffer, pagesize=page_size, rightMargin=0.5*inch, leftMargin=0.5*inch, topMargin=0.5*inch, bottomMargin=0.5*inch)
+    
+    elements = []
+    
+    # Add title
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'Title',
+        parent=styles['Heading1'],
+        fontSize=settings["title_font_size"],
+        alignment={"Left": TA_LEFT, "Center": TA_CENTER, "Right": TA_RIGHT}[settings["title_alignment"]],
+        spaceAfter=12
+    )
+    elements.append(Paragraph(settings["title_text"], title_style))
+    elements.append(Spacer(1, 12))
+    
+    # Prepare data for table
+    data = [[Paragraph(col, styles['Heading2']) for col in df.columns]]
+    for _, row in df.iterrows():
+        data.append([Paragraph(str(cell), styles['Normal']) for cell in row])
+    
+    # Create table
+    col_widths = [0.5*inch, 2*inch] + [1.75*inch] * 4 if settings["page_orientation"] == "Landscape" else [0.5*inch, 1.5*inch] + [1.5*inch] * 4
+    table = Table(data, colWidths=col_widths)
+    
+    # Style the table
+    style = TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor(settings["header_bg_color"])),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.HexColor(settings["header_text_color"])),
+        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0,0), (-1,0), 12),
+        ('BOTTOMPADDING', (0,0), (-1,0), 12),
+        ('BACKGROUND', (0,1), (-1,-1), colors.beige),
+        ('TEXTCOLOR', (0,1), (-1,-1), colors.black),
+        ('FONTNAME', (0,1), (-1,-1), 'Helvetica'),
+        ('FONTSIZE', (0,1), (-1,-1), 10),
+        ('TOPPADDING', (0,1), (-1,-1), 6),
+        ('BOTTOMPADDING', (0,1), (-1,-1), 6),
+        ('GRID', (0,0), (-1,-1), 1, colors.black),
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('WORDWRAP', (0,0), (-1,-1), True),
+    ])
+    table.setStyle(style)
+    
+    # Add alternating row colors
+    for i in range(1, len(data)):
+        if i % 2 == 0:
+            bc = colors.white
+        else:
+            bc = colors.HexColor(settings["alt_row_color"])
+        ts = TableStyle([('BACKGROUND', (0,i), (-1,i), bc)])
+        table.setStyle(ts)
+    
+    elements.append(table)
+    
+    # Build PDF
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer
+
+def save_as_docx(df):
+    doc = Document()
+    doc.add_heading('MCQ Questions', 0)
+
+    table = doc.add_table(rows=1, cols=6)
+    table.style = 'Table Grid'
+    hdr_cells = table.rows[0].cells
+    for i, column_name in enumerate(df.columns):
+        hdr_cells[i].text = column_name
+
+    for _, row in df.iterrows():
+        row_cells = table.add_row().cells
+        for i, value in enumerate(row):
+            row_cells[i].text = str(value)
+
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+def main():
+    add_styles()
+    st.title("MCQ Extractor")
+    st.write("Upload an image or PDF file to extract multiple-choice questions.")
+
+    uploaded_file = st.file_uploader("Choose a file", type=["png", "jpg", "jpeg", "pdf"])
+
+    if 'mcq_df' not in st.session_state:
+        st.session_state.mcq_df = None
+
+    if uploaded_file is not None:
+        if st.button("Extract MCQs"):
+            with st.spinner("Extracting MCQs..."):
+                st.session_state.mcq_df = extract_mcqs(uploaded_file)
+            
+            if st.session_state.mcq_df is not None:
+                st.success("MCQs extracted successfully!")
+
+    if st.session_state.mcq_df is not None:
+        st.write("Extracted MCQs:")
+        edited_df = st.data_editor(
+            st.session_state.mcq_df,
+            num_rows="dynamic",
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Number": st.column_config.NumberColumn(
+                    "Number",
+                    width="small",
+                    required=True,
+                ),
+                "Question": st.column_config.TextColumn(
+                    "Question",
+                    width="large",
+                    required=True,
+                ),
+                "Option A": st.column_config.TextColumn(
+                    "Option A",
+                    width="medium",
+                    required=True,
+                ),
+                "Option B": st.column_config.TextColumn(
+                    "Option B",
+                    width="medium",
+                    required=True,
+                ),
+                "Option C": st.column_config.TextColumn(
+                    "Option C",
+                    width="medium",
+                    required=True,
+                ),
+                "Option D": st.column_config.TextColumn(
+                    "Option D",
+                    width="medium",
+                    required=True,
+                ),
+            }
+        )
+
+        # Update the session state with edited dataframe
+        st.session_state.mcq_df = edited_df
+
+        # Customize PDF settings
+        pdf_settings = customize_pdf_settings()
+
+        # Download options
+        st.subheader("Download Options")
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            csv = save_as_csv(edited_df)
+            st.download_button(
+                label="Download CSV",
+                data=csv,
+                file_name="mcqs.csv",
+                mime="text/csv"
+            )
+        
+        with col2:
+            json_str = save_as_json(edited_df)
+            st.download_button(
+                label="Download JSON",
+                data=json_str,
+                file_name="mcqs.json",
+                mime="application/json"
+            )
+        
+        with col3:
+            pdf_buffer = save_as_pdf(edited_df, pdf_settings)
+            st.download_button(
+                label="Download PDF",
+                data=pdf_buffer,
+                file_name="mcqs.pdf",
+                mime="application/pdf"
+            )
+        
+        with col4:
+            docx_buffer = save_as_docx(edited_df)
+            st.download_button(
+                label="Download DOCX",
+                data=docx_buffer,
+                file_name="mcqs.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+
+if __name__ == "__main__":
+    main()
