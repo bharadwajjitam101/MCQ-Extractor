@@ -6,3 +6,8 @@ reportlab
 python-docx
 transformers
 huggingface_hub
+
+groq 
+llama-index 
+reportlab 
+python-dotenv
