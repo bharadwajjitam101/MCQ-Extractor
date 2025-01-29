@@ -1,18 +1,9 @@
-# What the code does?
-# 0. Uses Streamlit to deploy the real use of the code
-# 1. Extracts text from images or PDFs.
-# 2. Uses the Groq API to parse and format MCQs from the extracted text.
-# 3. Allows users to edit the extracted MCQs interactively.
-# 4. Provides options to save the MCQs in various formats (CSV, JSON, PDF, DOCX).
-
 import streamlit as st
 import pytesseract
 from PIL import Image
 import pandas as pd
-from groq import Groq
 import os
 import tempfile
-from llama_index.core import SimpleDirectoryReader
 import re
 import json
 from reportlab.lib import colors
@@ -24,17 +15,63 @@ from reportlab.lib.units import inch
 from docx import Document
 from docx.shared import Inches
 import io
+from transformers import pipeline
+from huggingface_hub import login
 
-groq_api_key = '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'
+def configure_huggingface_token():
+    if 'hf_token' not in st.session_state:
+        st.session_state.hf_token = None
+    
+    st.sidebar.header("Configuration")
+    
+    token_source = st.sidebar.radio(
+        "Hugging Face Token Source",
+        ["Environment Variable", "Manual Input"],
+        help="Choose how to provide your Hugging Face token"
+    )
+    
+    if token_source == "Environment Variable":
+        token = os.getenv('HUGGINGFACE_TOKEN')
+        if token:
+            st.sidebar.success("Token found in environment variables!")
+            st.session_state.hf_token = token
+        else:
+            st.sidebar.error("""Token not found in environment variables. 
+            Please set HUGGINGFACE_TOKEN environment variable or use manual input.""")
+            
+    else:  # Manual Input
+        token = st.sidebar.text_input(
+            "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",
+            type="password",
+            help="Enter your Hugging Face token. Get it from https://huggingface.co/settings/tokens"
+        )
+        if token:
+            st.session_state.hf_token = token
+            
+    return st.session_state.hf_token is not None
+
+@st.cache_resource
+def load_model():
+    if st.session_state.hf_token:
+        login(token=st.session_state.hf_token)
+        try:
+            pipe = pipeline("text-generation", 
+                          model="deepseek-ai/DeepSeek-R1", 
+                          trust_remote_code=True)
+            return pipe
+        except Exception as e:
+            st.error(f"Error loading model: {str(e)}")
+            return None
+    else:
+        st.error("Hugging Face token not configured!")
+        return None
 
 def add_styles():
     st.markdown(
         """
         <style>
-        /* Import Google Fonts */
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
 
-        /* Global Styles */
         body {
             font-family: 'Poppins', sans-serif;
             color: #1a202c;
@@ -46,7 +83,6 @@ def add_styles():
             background-size: cover;
         }
 
-        /* Main content area */
         .main .block-container {
             background-color: rgba(0, 0, 0, 0.95);
             border-radius: 15px;
@@ -55,7 +91,6 @@ def add_styles():
             backdrop-filter: blur(10px);
         }
 
-        /* Header Styles */
         h1 {
             color: #4a5568;
             font-weight: 700;
@@ -65,7 +100,6 @@ def add_styles():
             text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
         }
 
-        /* Streamlit elements styling */
         .stButton > button {
             background-color: #4299e1;
             color: white;
@@ -97,7 +131,6 @@ def add_styles():
             box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.5);
         }
 
-        /* File uploader styling */
         .stFileUploader > div {
             border: 2px dashed #4299e1;
             border-radius: 15px;
@@ -112,7 +145,6 @@ def add_styles():
             border-color: #3182ce;
         }
 
-        /* Data editor styling */
         .stDataFrame {
             border: none;
             border-radius: 10px;
@@ -135,7 +167,6 @@ def add_styles():
             background-color: #edf2f7;
         }
 
-        /* Download buttons styling */
         .stDownloadButton > button {
             background-color: #48bb78;
             color: white;
@@ -153,7 +184,6 @@ def add_styles():
             box-shadow: 0 7px 14px rgba(50, 50, 93, 0.1), 0 3px 6px rgba(0, 0, 0, 0.08);
         }
 
-        /* Customize PDF settings section */
         .stSubheader {
             color: #4a5568;
             font-weight: 600;
@@ -164,19 +194,16 @@ def add_styles():
             padding-bottom: 0.5rem;
         }
 
-        /* Color picker styling */
         .stColorPicker > div > div > div {
             border-radius: 10px;
             border: 2px solid #e2e8f0;
             overflow: hidden;
         }
 
-        /* Slider styling */
         .stSlider > div > div > div > div {
             background-color: #4299e1;
         }
 
-        /* Success message styling */
         .stSuccess {
             background-color: #48bb78;
             color: white;
@@ -186,7 +213,6 @@ def add_styles():
             box-shadow: 0 4px 6px rgba(50, 50, 93, 0.11), 0 1px 3px rgba(0, 0, 0, 0.08);
         }
 
-        /* Warning message styling */
         .stWarning {
             background-color: #ecc94b;
             color: #744210;
@@ -196,7 +222,6 @@ def add_styles():
             box-shadow: 0 4px 6px rgba(50, 50, 93, 0.11), 0 1px 3px rgba(0, 0, 0, 0.08);
         }
 
-        /* Error message styling */
         .stError {
             background-color: #f56565;
             color: white;
@@ -206,7 +231,6 @@ def add_styles():
             box-shadow: 0 4px 6px rgba(50, 50, 93, 0.11), 0 1px 3px rgba(0, 0, 0, 0.08);
         }
 
-        /* Improve readability of text on the background image */
         .stApp > .main {
             background-color: rgba(255, 255, 255, 0.1);
             backdrop-filter: blur(10px);
@@ -215,7 +239,6 @@ def add_styles():
             padding: 1rem;
         }
 
-        /* Style the sidebar */
         .sidebar .sidebar-content {
             background-color: rgba(255, 255, 255, 0.1);
             backdrop-filter: blur(10px);
@@ -248,18 +271,15 @@ def extract_text_from_pdf(file):
         else:
             return ""
 
-def parse_and_format_mcqs_with_groq(text):
-    client = Groq(api_key=groq_api_key)
-    response = client.chat.completions.create(
-        model="llama-3.1-70b-versatile",
-        messages=[
-            {
-                "role": "system",
-                "content": "You are a helpful assistant that extracts and formats multiple-choice questions (MCQs) from text."
-            },
-            {
-                "role": "user",
-                "content": f"""Extract the questions and options from the following text, and format them as a numbered list of questions with their options. Each question should be on a new line, preceded by its number, followed by its options (A, B, C, D) on separate lines. Here's the text:
+def parse_and_format_mcqs_with_deepseek(text, pipe):
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a helpful assistant that extracts and formats multiple-choice questions (MCQs) from text."
+        },
+        {
+            "role": "user",
+            "content": f"""Extract the questions and options from the following text, and format them as a numbered list of questions with their options. Each question should be on a new line, preceded by its number, followed by its options (A, B, C, D) on separate lines. Here's the text:
 
 {text}
 
@@ -279,16 +299,16 @@ D) [Option D]
 ... and so on.
 
 Respond only with the formatted questions and options, no additional text."""
-            }
-        ],
-        temperature=0.25,
-        max_tokens=1024,
-        top_p=1,
-        stream=False,
-        stop=None
-    )
+        }
+    ]
     
-    return response.choices[0].message.content
+    response = pipe(messages, 
+                   max_new_tokens=1024,
+                   temperature=0.25,
+                   top_p=1,
+                   do_sample=True)
+    
+    return response[0]['generated_text']
 
 def process_raw_mcq_text(raw_text):
     pattern = r'(\d+)\.\s+(.*?)\nA\)\s+(.*?)\nB\)\s+(.*?)\nC\)\s+(.*?)\nD\)\s+(.*?)(?:\n|$)'
@@ -304,6 +324,10 @@ def process_raw_mcq_text(raw_text):
     return mcq_data
 
 def extract_mcqs(file):
+    pipe = load_model()
+    if pipe is None:
+        return None
+        
     file_extension = os.path.splitext(file.name)[1].lower()
     if file_extension in ['.png', '.jpg', '.jpeg']:
         text = extract_text_from_image(file)
@@ -322,15 +346,14 @@ def extract_mcqs(file):
         st.write(f"Number of chunks to process: {len(chunks)}")
         
         all_mcq_data = []
-        question_number = 1  # Initialize question number
+        question_number = 1
         for i, chunk in enumerate(chunks):
             st.write(f"Processing chunk {i+1}/{len(chunks)}")
-            raw_mcq_text = parse_and_format_mcqs_with_groq(chunk)
+            raw_mcq_text = parse_and_format_mcqs_with_deepseek(chunk, pipe)
             st.text("Extracting your MCQ Questions:")
             st.code(raw_mcq_text)
             mcq_data = process_raw_mcq_text(raw_mcq_text)
             
-            # Update question numbers to ensure continuity
             for mcq in mcq_data:
                 mcq['question_number'] = question_number
                 question_number += 1
