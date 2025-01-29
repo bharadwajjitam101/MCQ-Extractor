@@ -12,7 +12,7 @@ import requests
 from streamlit.components.v1 import html
 
 # API Key (Consider using environment variables in production)
-groq_api_key = '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'
+groq_api_key = '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'
 
 def add_styles():
     st.markdown(
