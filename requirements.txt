@@ -1,9 +1,8 @@
-streamlit 
-pytesseract 
-pillow 
-pandas 
-groq 
-llama-index 
-reportlab 
+streamlit
+pytesseract
+pillow
+pandas
+reportlab
 python-docx
-python-dotenv
+transformers
+huggingface_hub
